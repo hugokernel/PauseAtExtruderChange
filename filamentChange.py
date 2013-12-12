@@ -1,10 +1,10 @@
-#Name: Multi material
-#Info: Pause the printer at a certain height
+#Name: FilamentCHange
+#Info: Allow filament change for printing multi material with a single extruder setup.
 #Depend: GCode
 #Type: postprocess
-#Param: pauseLevel(float:5.0) Pause height (mm)
-#Param: parkX(float:190) Head park X (mm)
-#Param: parkY(float:190) Head park Y (mm)
+#Param: parkX(float:160) Head park X (mm)
+#Param: parkY(float:20) Head park Y (mm)
+#Param: parkZ(float:+15) Head park Z (mm)
 #Param: retractAmount(float:5) Retraction amount (mm)
 
 import sys, getopt, re
@@ -18,11 +18,23 @@ except getopt.GetoptError as err:
     usage()
     sys.exit(2)
 
-park_x = 160
-park_y = 20
-park_z = '+15'
-#park_z = 15
-retractAmount = 5
+'''
+parkX = 160 if parkX is None else parkX
+parkY = 20 if parkY is None else parkY
+parkX = '+15' if parkZ is None else parkZ
+retractAmount = 5 if retractAmount is None else retractAmount
+'''
+
+try:
+    parkX
+    parkY
+    parkZ
+    retractAmount
+except:
+    parkX = 160
+    parkY = 20
+    parkZ = '+15'
+    retractAmount = 5
 
 '''
 output = None
@@ -51,13 +63,16 @@ def emit(g, *args):
                 else:
                     print arg[0] + str(arg[1]),
             else:
-                print arg
+                print arg,
         print
     else:
         print g
 
 filename = args[0]
 fanValue = None
+
+inHeader = True
+beginSkip = False
 
 #emit('G', ['X', 10])
 #emit('G', 100)
@@ -70,85 +85,96 @@ with open(filename, "r") as f:
         if not line:
             break
 
+        if line[0:-1] == 'M117 Printing...':
+            beginSkip = False
+            inHeader = False
+
+        # Skip header data
+        if inHeader and line.strip() == 'T1':
+            beginSkip = True
+            emit("\n;Begin FilamentChange : Skip header")
+
+        if beginSkip:
+            line = ';' + line 
+
         if line[0:4] == 'M106':
             fanValue = line[4:].strip()
+            continue
 
-        m = re.match(".*Z([0-9\.\+-]+)[\s\n]?", line)
-        if m:
-            last_z = m.group(1).strip()
-            #print m.groups()
-            #print "--"
+        if inHeader:
+            emit(line.strip())
 
-        '''
-        continue
-        pos = line.find('Z')
-        if pos > 0:
-            blank = line.find(' ', pos)
-            if blank < 0:
-                blank = len(line)
-            last_z = line[pos:blank]
-            print "Found:" + last_z
-        '''
-
-        if line[0] == 'T':
-            # Read next line
-            line = f.readline()
-
-            for c in str(line).split():
-                if c[0] == 'X':
-                    x = c[1:]
-                elif c[0] == 'Y':
-                    y = c[1:]
-                elif c[0] == 'Z':
-                    z = c[1:]
-
-            emit(';MULTIEX BEGIN')
-
-            # Extruder to relative mode
-            emit('M83')
-
-            # Park Z
-            emit('G1', ['Z+', float(park_z)])
-
-            # Retract
-            emit('G1', ['E-', retractAmount], ['F', 6000])
-
-            # Park X, Y
-            emit('G0', ['X', float(park_x)], ['Y', float(park_y)])
-
-            # Stop fan
-            emit('M107')
-
-            # Message, wait user
-            emit('M117', 'Filament')
-            emit('M0')
-
-            # Push the filament back, and retract again, the properly primes the nozzle when changing filament.
-            emit('G1', ['E', retractAmount], ['F', 6000])
-            emit('G1', ['E', -retractAmount], ['F', 6000])
-
-            # Restore X, Y
-            emit('G1', ['X', float(x)], ['Y', float(y)]) #, ['F', 9000])
-
-            emit('G1', ['E', retractAmount], ['F', 6000])
-            #emit('G1', ['F', 9000])
-
-            # Extruder to absolute mode
-            emit('M82')
-
-            # Restart fan
-            if fanValue:
-                emit('M106', fanValue)
-
-            # Restore Z
-            if z:
-                emit('G0', ['Z', z])
-            else:
-                emit('G0', ['Z', last_z])
-            #emit('G1', ['Z-', float(park_z)])
-
-            emit(';MULTIEX END')
+            if line.strip()[1:] == 'T0':
+                beginSkip = False
+                emit(";End FilamentChange : Skip header\n")
         else:
-            #pass
-            print line.strip()
+            m = re.match(".*Z([0-9\.\+-]+)[\s\n]?", line)
+            if m:
+                last_z = m.group(1).strip()
+                #print m.groups()
+                #print "--"
+
+            '''
+            continue
+            pos = line.find('Z')
+            if pos > 0:
+                blank = line.find(' ', pos)
+                if blank < 0:
+                    blank = len(line)
+                last_z = line[pos:blank]
+                print "Found:" + last_z
+            '''
+
+            if line[0] == 'T':
+                currentExtruder = int(line[1])
+
+                # Read next line
+                line = f.readline()
+
+                for c in str(line).split():
+                    if c[0] == 'X':
+                        x = c[1:]
+                    elif c[0] == 'Y':
+                        y = c[1:]
+                    elif c[0] == 'Z':
+                        z = c[1:]
+
+                if not x or not y:
+                    raise Exception("Unable to found x, y coordinate !")
+
+                emit("\n;Begin FilamentChange %i" % currentExtruder)
+
+                
+                emit('M83', "; Extruder to relative mode")
+                emit('G1', ['Z+', float(parkZ)], "; Park Z")
+                emit('G1', ['E-', retractAmount], ['F', 6000], "; Retract")
+                emit('G0', ['X', float(parkX)], ['Y', float(parkY)], "# Park X, Y")
+                emit('M107', "; Stop fan")
+                emit('M117', 'Filament', "; Message, wait user")
+                emit('M0')
+
+                # Push the filament back, and retract again, the properly primes the nozzle when changing filament.
+                emit('G1', ['E', retractAmount], ['F', 6000])
+                emit('G1', ['E', -retractAmount], ['F', 6000])
+
+                emit('G1', ['X', float(x)], ['Y', float(y)], "; Restore X, Y") #, ['F', 9000])
+
+                emit('G1', ['E', retractAmount], ['F', 6000])
+                #emit('G1', ['F', 9000])
+
+                emit('M82', "; Extruder to absolute mode")
+
+                if fanValue:
+                    emit('M106', fanValue, "; Restart fan")
+
+                if z:
+                    emit('G0', ['Z', z], "; Restore Z")
+                else:
+                    emit('G0', ['Z', last_z], "; Restore Z")
+                #emit('G1', ['Z-', float(parkZ)])
+
+                emit(";End FilamentChange %i\n" % currentExtruder)
+            else:
+                #pass
+                print line.strip()
 
