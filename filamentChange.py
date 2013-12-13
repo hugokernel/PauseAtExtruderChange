@@ -1,4 +1,4 @@
-#Name: FilamentCHange
+#Name: FilamentChange
 #Info: Allow filament change for printing multi material with a single extruder setup.
 #Depend: GCode
 #Type: postprocess
@@ -12,46 +12,45 @@ import sys, getopt, re
 def usage():
     print "Todo !"
 
-try:
-    opts, args = getopt.getopt(sys.argv[1:], "h:v", ["help", "output="])
-except getopt.GetoptError as err:
-    usage()
-    sys.exit(2)
-
-'''
-parkX = 160 if parkX is None else parkX
-parkY = 20 if parkY is None else parkY
-parkX = '+15' if parkZ is None else parkZ
-retractAmount = 5 if retractAmount is None else retractAmount
-'''
-
-try:
-    parkX
-    parkY
-    parkZ
-    retractAmount
-except:
+inCura = 'filename' in globals()
+inCura = True
+if inCura:
+    f = open('/Users/hugo/Documents/GitHub/FilamentChange/filename.modified.gcode', 'w')
+    sys.stdout = f
+else:
     parkX = 160
     parkY = 20
     parkZ = '+15'
     retractAmount = 5
 
-'''
-output = None
-verbose = False
-
-for o, a in opts:
-    if o == "-v":
-        verbose = True
-    elif o in ("-h", "--help"):
+    try:
+        opts, args = getopt.getopt(sys.argv[1:], "h:vx:y:z:r:", ["help", "output="])
+    except getopt.GetoptError as err:
         usage()
-        sys.exit()
-    elif o in ("-o", "--output"):
-        output = a
-    else:
-        print("Option {} inconnue".format(o))
         sys.exit(2)
-'''
+
+    for opt, arg in opts:
+        if opt == "-v":
+            verbose = True
+        elif opt in ("-h", "--help"):
+            usage()
+            sys.exit()
+        elif opt == '-x':
+            parkX = arg
+        elif opt == '-y':
+            parkY = arg
+        elif opt == '-z':
+            parkZ = arg
+        elif opt == '-r':
+            retractAmount = arg
+        else:
+            print("Unknow {} option".format(o))
+            sys.exit(2)
+
+    filename = args[0]
+    #filename = "example/header.gcode"
+    f = open(filename + '.modified.gcode', 'w')
+    #sys.stdout = f
 
 def emit(g, *args):
     if args:
@@ -68,19 +67,12 @@ def emit(g, *args):
     else:
         print g
 
-filename = args[0]
-fanValue = None
-
-inHeader = True
-beginSkip = False
-
-#emit('G', ['X', 10])
-#emit('G', 100)
-#gdasas
+inHeader, beginSkip, line, lastLine, fanValue = True, False, None, None, None
 
 with open(filename, "r") as f:
     x, y, z = None, None, None
     while True:
+        lastLine = line
         line = f.readline()
         if not line:
             break
@@ -95,7 +87,7 @@ with open(filename, "r") as f:
             emit("\n;Begin FilamentChange : Skip header")
 
         if beginSkip:
-            line = ';' + line 
+            line = ';' + line if line.strip()[0] != ';' else line
 
         if line[0:4] == 'M106':
             fanValue = line[4:].strip()
@@ -111,24 +103,12 @@ with open(filename, "r") as f:
             m = re.match(".*Z([0-9\.\+-]+)[\s\n]?", line)
             if m:
                 last_z = m.group(1).strip()
-                #print m.groups()
-                #print "--"
-
-            '''
-            continue
-            pos = line.find('Z')
-            if pos > 0:
-                blank = line.find(' ', pos)
-                if blank < 0:
-                    blank = len(line)
-                last_z = line[pos:blank]
-                print "Found:" + last_z
-            '''
 
             if line[0] == 'T':
                 currentExtruder = int(line[1])
 
                 # Read next line
+                lastLine = line
                 line = f.readline()
 
                 for c in str(line).split():
@@ -144,7 +124,8 @@ with open(filename, "r") as f:
 
                 emit("\n;Begin FilamentChange %i" % currentExtruder)
 
-                
+                emit(";" + lastLine.strip());
+
                 emit('M83', "; Extruder to relative mode")
                 emit('G1', ['Z+', float(parkZ)], "; Park Z")
                 emit('G1', ['E-', retractAmount], ['F', 6000], "; Retract")
@@ -176,5 +157,8 @@ with open(filename, "r") as f:
                 emit(";End FilamentChange %i\n" % currentExtruder)
             else:
                 #pass
-                print line.strip()
+                #print line.strip()
+                emit(line.strip())
+
+sys.stdout.close()
 

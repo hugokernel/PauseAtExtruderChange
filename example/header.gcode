@@ -11,7 +11,7 @@ G28 X0 Y0  ;move X/Y to min endstops
 G28 Z0     ;move Z to min endstops
 G1 Z15.0 F9000 ;move the platform down 15mm
 T1
-G92 E0                  ;zero the extruded length
+;G92 E0                  ;zero the extruded length
 G1 F200 E10             ;extrude 10mm of feed stock
 G92 E0                  ;zero the extruded length again
 G1 F200 E-16.5
