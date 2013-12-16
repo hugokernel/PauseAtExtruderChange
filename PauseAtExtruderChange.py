@@ -10,31 +10,52 @@
 from __future__ import print_function
 import sys, getopt, re
 
-def usage():
-    print("Todo !")
-
+lines = []
 verbose = False
 fileout = sys.stdout
 
-inCura = 'filename' in globals()
-if inCura:
-    # Load file from filename variable
+def loadGCode(filename):
+    global lines
     with open(filename, "r") as f:
     	lines = f.readlines()
 
-    #sys.stdout = open(filename, 'w')
+def p(string):
+    if verbose:
+        print(('; ' + string) if fileout == sys.stdout else string)
+
+inCura = 'filename' in globals()
+if inCura:
+    loadGCode(filename)
+
     fileout = open(filename, 'w')
 else:
     parkX = 160
     parkY = 20
     parkZ = '+15'
     retractAmount = 5
+    fileout = sys.stdout
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "h:vx:y:z:r:o:", ["help", "output="])
+        opts, args = getopt.getopt(sys.argv[1:], "h:vx:y:z:r:i:o:", ["help", "output="])
     except getopt.GetoptError as err:
         usage()
         sys.exit(2)
+
+    def usage():
+        print("""Usage :
+ {} -[xyzro] input.gcode
+
+Options :
+ -v Be verbose
+
+ -x Set the x park position
+ -y Set the y park position
+ -z Set the z park position
+ -r Retract amount
+
+ -i Input file
+ -o Output file (if not specified, stdout)
+""".format(__file__))
 
     for opt, arg in opts:
         if opt == "-v":
@@ -50,16 +71,25 @@ else:
             parkZ = arg
         elif opt == '-r':
             retractAmount = arg
+        elif opt == '-i':
+            filename = arg
         elif opt == '-o':
             fileout = open(arg, 'w')
         else:
             print("Unknow {} option".format(o))
             sys.exit(2)
 
+    # If no -i arg, load from args[0]
+    if not 'filename' in globals() and len(args):
+        filename = args[0]
 
-    # Load file from arg
-    with open(args[0], "r") as f:
-    	lines = f.readlines()
+    loadGCode(filename)
+
+if not 'filename' in globals():
+    usage()
+    sys.exit(2)
+
+p("Load gcode from {}".format(filename))
 
 def emit(g, *args):
     if args:
@@ -82,8 +112,8 @@ inHeader, beginSkip, line, lastLine, fanValue = True, False, None, None, None
 x, y, z = None, None, None
 
 if verbose:
-    print("Head park X: {0}, Y: {1}, Z: {2}".format(parkX, parkY, parkZ))
-    print("Retract amount : {0}".format(retractAmount))
+    p("Head park X: {0}, Y: {1}, Z: {2}".format(parkX, parkY, parkZ))
+    p("Retract amount : {0}".format(retractAmount))
 
 lines = iter(lines)
 try:
@@ -125,7 +155,6 @@ try:
 
                 # Read next line
                 lastLine = line
-                #line = f.readline()
                 line = lines.next()
 
                 for c in str(line).split():
@@ -173,11 +202,9 @@ try:
 
                 emit(";TYPE:CUSTOM End PauseAtExtruderChange %i\n" % currentExtruder)
             else:
-                #pass
-                #print line.strip()
                 emit(line.strip())
 except StopIteration:
     pass
 
-sys.stdout.close()
+fileout.close()
 
