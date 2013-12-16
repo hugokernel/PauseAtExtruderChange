@@ -7,10 +7,14 @@
 #Param: parkZ(float:+15) Head park Z (mm)
 #Param: retractAmount(float:5) Retraction amount (mm)
 
+from __future__ import print_function
 import sys, getopt, re
 
 def usage():
-    print "Todo !"
+    print("Todo !")
+
+verbose = False
+fileout = sys.stdout
 
 inCura = 'filename' in globals()
 if inCura:
@@ -18,7 +22,8 @@ if inCura:
     with open(filename, "r") as f:
     	lines = f.readlines()
 
-    sys.stdout = open(filename, 'w')
+    #sys.stdout = open(filename, 'w')
+    fileout = open(filename, 'w')
 else:
     parkX = 160
     parkY = 20
@@ -26,7 +31,7 @@ else:
     retractAmount = 5
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "h:vx:y:z:r:", ["help", "output="])
+        opts, args = getopt.getopt(sys.argv[1:], "h:vx:y:z:r:o:", ["help", "output="])
     except getopt.GetoptError as err:
         usage()
         sys.exit(2)
@@ -45,9 +50,12 @@ else:
             parkZ = arg
         elif opt == '-r':
             retractAmount = arg
+        elif opt == '-o':
+            fileout = open(arg, 'w')
         else:
             print("Unknow {} option".format(o))
             sys.exit(2)
+
 
     # Load file from arg
     with open(args[0], "r") as f:
@@ -55,22 +63,27 @@ else:
 
 def emit(g, *args):
     if args:
-        print g,
+        print(g, end = ' ', file = fileout)
         for arg in args:
             if isinstance(arg, list):
                 if isinstance(arg[1], float):
-                    print "%s%0.02f" % (arg[0], arg[1]),
+                    #print("%s%0.02f".format(arg[0], arg[1]), end = '', file = fileout)
+                    print("{0}{1:0.02f}".format(arg[0], arg[1]), end = ' ', file = fileout)
                 else:
-                    print arg[0] + str(arg[1]),
+                    print(arg[0] + str(arg[1]), end = ' ', file = fileout)
             else:
-                print arg,
-        print
+                print(arg, end = ' ', file = fileout)
+        print(file = fileout)
     else:
-        print g
+        print(g, file = fileout)
 
 inHeader, beginSkip, line, lastLine, fanValue = True, False, None, None, None
 
 x, y, z = None, None, None
+
+if verbose:
+    print("Head park X: {0}, Y: {1}, Z: {2}".format(parkX, parkY, parkZ))
+    print("Retract amount : {0}".format(retractAmount))
 
 lines = iter(lines)
 try:
